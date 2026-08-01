@@ -622,8 +622,3 @@ button.submit::after{
   z-index: 2;          /* nằm trên sky/trees nhưng dưới card */
   pointer-events: none; /* không chặn click */
 }
-
-.card {
-  position: relative;
-  z-index: 1;
-}
