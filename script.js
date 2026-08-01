@@ -185,6 +185,8 @@ function applySeason(seasonKey, isInitialLoad) {
 
   spawnSeasonParticles(seasonKey);
   loadPlaylistForSeason(seasonKey, isInitialLoad);
+
+  if (window.setTreeSeason) window.setTreeSeason(seasonKey);
 }
 
 // Chuyển mùa mượt mà: mờ dần sang một sắc ấm trung tính, đổi cảnh phía sau
@@ -627,3 +629,341 @@ function showStatus(msg, ok) {
 
 // ================= KHỞI TẠO =================
 applySeason(currentSeason, false);
+// ================= CÂY CANVAS 4 MÙA =================
+(function() {
+  const canvas = document.getElementById('treeCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let W, H;
+  let treeSeason = 'spring'; // nội bộ cây: spring, summer, autumn, winter
+
+  // Cấu trúc cây fractal
+  const branches = [];
+  const leafPoints = [];
+  let leafRenderData = [];     // {x, y, angle, color, size, visible}
+  let fallingParticles = [];
+  let snowPatches = [];
+
+  function resizeCanvas() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    // Vẽ lại cây sau khi resize (chạy lại toàn bộ khởi tạo)
+    initTreeData();
+  }
+
+  function buildTree() {
+    branches.length = 0;
+    leafPoints.length = 0;
+
+    const startX = W / 2;
+    const startY = H - 40;
+    const startLen = Math.min(H * 0.25, 160);
+    const startAngle = -Math.PI / 2;
+    const startWidth = 14;
+    const maxDepth = 7;
+
+    function addBranch(x, y, len, angle, width, depth) {
+      if (depth < 1 || len < 4) return;
+      const x2 = x + len * Math.cos(angle);
+      const y2 = y + len * Math.sin(angle);
+      branches.push({ x1: x, y1: y, x2: x2, y2: y2, width: width });
+
+      const steps = Math.floor(len / 9) + 1;
+      for (let i = 1; i <= steps; i++) {
+        const t = i / (steps + 0.5);
+        const lx = x + (x2 - x) * t;
+        const ly = y + (y2 - y) * t;
+        const offsetX = (Math.random() - 0.5) * 4;
+        const offsetY = (Math.random() - 0.5) * 4;
+        leafPoints.push({ x: lx + offsetX, y: ly + offsetY, angle: angle });
+      }
+
+      const childLen = len * 0.68;
+      const childWidth = width * 0.72;
+      const angleDiff = 0.45 + Math.random() * 0.2;
+      addBranch(x2, y2, childLen * (0.9 + Math.random() * 0.2), angle - angleDiff, childWidth, depth - 1);
+      addBranch(x2, y2, childLen * (0.9 + Math.random() * 0.2), angle + angleDiff, childWidth, depth - 1);
+      if (depth > 3 && Math.random() < 0.4) {
+        addBranch(x2, y2, childLen * 0.5, angle + (Math.random() - 0.5) * 0.8, childWidth * 0.6, depth - 2);
+      }
+    }
+    addBranch(startX, startY, startLen, startAngle, startWidth, maxDepth);
+  }
+
+  function prepareLeafData(season) {
+    leafRenderData = [];
+    let density, colorPalette;
+    switch (season) {
+      case 'spring':
+        density = 1.0;
+        colorPalette = ['#43A047', '#66BB6A', '#81C784', '#2E7D32', '#4CAF50'];
+        break;
+      case 'summer':
+        density = 0.95;
+        colorPalette = ['#FBC02D', '#F9A825', '#F57F17', '#FFB300', '#FFA000', '#E65100'];
+        break;
+      case 'autumn':
+        density = 0.35;
+        colorPalette = ['#D84315', '#E65100', '#EF6C00', '#FF8F00', '#F9A825', '#C62828', '#B71C1C', '#8D6E63'];
+        break;
+      case 'winter':
+      default:
+        density = 0;
+        colorPalette = [];
+        break;
+    }
+    for (let i = 0; i < leafPoints.length; i++) {
+      const p = leafPoints[i];
+      const seed = (i * 9301 + 49297) % 233280;
+      const rand = seed / 233280;
+      if (rand < density) {
+        const color = colorPalette[Math.floor((seed * 7.13) % colorPalette.length)];
+        const size = 5.5 + (seed * 4.2) % 3.5;
+        leafRenderData.push({ x: p.x, y: p.y, angle: p.angle, color, size, visible: true });
+      }
+    }
+  }
+
+  function buildSnowPatches() {
+    snowPatches = [];
+    for (let b of branches) {
+      const len = Math.hypot(b.x2 - b.x1, b.y2 - b.y1);
+      if (len < 8) continue;
+      const patchesCount = Math.floor(len / 15) + 1;
+      for (let i = 0; i < patchesCount; i++) {
+        const t = (i + 0.5) / patchesCount;
+        const bx = b.x1 + (b.x2 - b.x1) * t;
+        const by = b.y1 + (b.y2 - b.y1) * t;
+        const r = b.width * 1.6 + Math.random() * 3.5;
+        snowPatches.push({ x: bx + (Math.random() - 0.5) * 4, y: by + (Math.random() - 0.5) * 5, r: Math.max(2.5, r) });
+      }
+    }
+  }
+
+  function resetFallingParticles(season) {
+    fallingParticles = [];
+    if (season === 'autumn') {
+      const leafColors = ['#D84315', '#EF6C00', '#FF8F00', '#F9A825', '#C62828', '#BF360C', '#E65100'];
+      for (let i = 0; i < 60; i++) {
+        fallingParticles.push({
+          type: 'leaf',
+          x: Math.random() * W * 0.8 + W * 0.1,
+          y: Math.random() * H * 0.6 + 20,
+          vx: (Math.random() - 0.5) * 1.8,
+          vy: Math.random() * 1.2 + 0.5,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.08,
+          color: leafColors[Math.floor(Math.random() * leafColors.length)],
+          size: 5 + Math.random() * 6
+        });
+      }
+    } else if (season === 'winter') {
+      for (let i = 0; i < 80; i++) {
+        fallingParticles.push({
+          type: 'snow',
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: Math.random() * 1.5 + 0.4,
+          radius: 1.2 + Math.random() * 2.2,
+          opacity: 0.6 + Math.random() * 0.4
+        });
+      }
+    }
+  }
+
+  // ---- Vẽ ----
+  function drawBackground(season) {
+    let gradient;
+    switch (season) {
+      case 'spring':
+        gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#E8F5E9');
+        gradient.addColorStop(0.7, '#C8E6C9');
+        gradient.addColorStop(1, '#A5D6A7');
+        break;
+      case 'summer':
+        gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#FFF8E1');
+        gradient.addColorStop(0.6, '#FFECB3');
+        gradient.addColorStop(1, '#FFE082');
+        break;
+      case 'autumn':
+        gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#FBE9E7');
+        gradient.addColorStop(0.5, '#FFCCBC');
+        gradient.addColorStop(1, '#D7CCC8');
+        break;
+      case 'winter':
+        gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#CFD8DC');
+        gradient.addColorStop(0.7, '#B0BEC5');
+        gradient.addColorStop(1, '#90A4AE');
+        break;
+      default: gradient = '#F5F0E6';
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, W, H);
+
+    // Mặt đất
+    ctx.fillStyle = '#8D6E63';
+    ctx.beginPath();
+    ctx.rect(0, H - 25, W, 30);
+    ctx.fill();
+    ctx.fillStyle = '#6D4C41';
+    ctx.beginPath();
+    ctx.ellipse(W/2, H-25, Math.min(W*0.4, 300), 14, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawBranches() {
+    for (let b of branches) {
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(b.x2, b.y2);
+      ctx.strokeStyle = '#6D4C41';
+      ctx.lineWidth = b.width;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      if (b.width > 3) {
+        ctx.beginPath();
+        ctx.moveTo(b.x1, b.y1);
+        ctx.lineTo(b.x2, b.y2);
+        ctx.strokeStyle = '#8D6E63';
+        ctx.lineWidth = b.width * 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawLeaves() {
+    for (let leaf of leafRenderData) {
+      if (!leaf.visible) continue;
+      ctx.save();
+      ctx.translate(leaf.x, leaf.y);
+      ctx.rotate(leaf.angle);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, leaf.size, leaf.size * 0.4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = leaf.color;
+      ctx.fill();
+      ctx.strokeStyle = '#00000022';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawSnowPatches() {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = '#ffffffcc';
+    ctx.shadowBlur = 4;
+    for (let p of snowPatches) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
+
+  function updateAndDrawParticles(season) {
+    if (season !== 'autumn' && season !== 'winter') return;
+    for (let p of fallingParticles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.type === 'leaf') {
+        p.vy += 0.025;
+        p.rotation += p.rotSpeed;
+        p.vx += (Math.random() - 0.5) * 0.08;
+      } else if (p.type === 'snow') {
+        p.vy += 0.004;
+        p.vx += (Math.random() - 0.5) * 0.03;
+      }
+      if (p.y > H + 20) {
+        p.y = -10;
+        p.x = Math.random() * W;
+        p.vy = p.type === 'leaf' ? Math.random() * 0.6 + 0.3 : Math.random() * 1.2 + 0.3;
+        p.vx = (Math.random() - 0.5) * (p.type === 'leaf' ? 1.5 : 0.7);
+      }
+      if (p.x < -20) p.x = W + 15;
+      if (p.x > W + 20) p.x = -15;
+
+      ctx.save();
+      if (p.type === 'leaf') {
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.size, p.size * 0.4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.strokeStyle = '#00000018';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      } else if (p.type === 'snow') {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffffdd';
+        ctx.lineWidth = 0.4;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+    drawBackground(treeSeason);
+    drawBranches();
+    if (treeSeason === 'winter') {
+      drawSnowPatches();
+    } else {
+      drawLeaves();
+    }
+    updateAndDrawParticles(treeSeason);
+    requestAnimationFrame(animate);
+  }
+
+  // Khởi tạo dữ liệu cây (gọi khi resize hoặc lần đầu)
+  function initTreeData() {
+    buildTree();
+    prepareLeafData(treeSeason);
+    if (treeSeason === 'winter') buildSnowPatches();
+    else snowPatches = [];
+    resetFallingParticles(treeSeason);
+  }
+
+  // Hàm công khai để web CFS gọi đổi mùa
+  window.setTreeSeason = function(seasonKey) {
+    // Ánh xạ fall -> autumn
+    const mapped = seasonKey === 'fall' ? 'autumn' : seasonKey;
+    if (mapped === treeSeason) return;
+    treeSeason = mapped;
+    prepareLeafData(mapped);
+    if (mapped === 'winter') buildSnowPatches();
+    else snowPatches = [];
+    resetFallingParticles(mapped);
+  };
+
+  // Lắng nghe resize
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+  });
+
+  // Tạm dừng animation khi tab không active (tiết kiệm pin)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // Có thể hủy animation frame để dừng hẳn, nhưng đơn giản ta không làm gì,
+      // requestAnimationFrame tự động giảm tần suất khi tab ẩn.
+    }
+  });
+
+  // Bắt đầu
+  resizeCanvas();
+  // Đồng bộ mùa ban đầu với web CFS (nếu đã có currentSeason từ localStorage)
+  const initialSeason = localStorage.getItem('confessionSeason') || 'spring';
+  treeSeason = initialSeason === 'fall' ? 'autumn' : initialSeason;
+  initTreeData();
+  animate();
+})();
