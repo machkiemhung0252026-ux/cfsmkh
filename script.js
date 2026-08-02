@@ -145,7 +145,7 @@ const TRACK_TITLES = [
   "Khoảng Trời Riêng","Ánh Đèn Phố Đêm","Giai Điệu Xa Xăm","Tiếng Sóng Vỗ Bờ","Chiều Vàng Trên Phố",
   "Nốt Lặng Bình Yên","Hạt Mưa Rơi Nhẹ","Ánh Trăng Soi Bóng","Cơn Gió Mùa Hạ","Lặng Nghe Biển Hát"
 ];
-const TRACK_ARTISTS = [ ];
+const TRACK_ARTISTS = [""];
 
 const PLAYLIST = TRACK_TITLES.map((title, i) => ({
   title,
