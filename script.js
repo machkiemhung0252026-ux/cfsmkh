@@ -396,7 +396,7 @@ function formatTime(seconds){
 }
 
 // ---------- FORM LOGIC ----------
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwjLtjfMieZL4LGK5yoWzHACjY3A3KygXaeRqJmH9PZbcXGXEDOX2KzKT0E4D9GeaS9Bw/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjUs5CxzQ08ja8g845-kn2jiY8kCyv9luVKlFyKWJNVbYLLPN3DqVRtVM7REgnDn2w/exec";
 
 const categorySelect = document.getElementById('categorySelect');
 const contentEl = document.getElementById('content');
