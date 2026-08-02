@@ -145,15 +145,12 @@ const TRACK_TITLES = [
   "Khoảng Trời Riêng","Ánh Đèn Phố Đêm","Giai Điệu Xa Xăm","Tiếng Sóng Vỗ Bờ","Chiều Vàng Trên Phố",
   "Nốt Lặng Bình Yên","Hạt Mưa Rơi Nhẹ","Ánh Trăng Soi Bóng","Cơn Gió Mùa Hạ","Lặng Nghe Biển Hát"
 ];
-const TRACK_ARTISTS = [
-  "Confession Ambient","Chill Lofi","Acoustic Piano","Piano Nhẹ Nhàng",
-  "Lofi Chill Beats","Indie Acoustic","Ambient Chill","Guitar Mộc"
-];
+const TRACK_ARTISTS = [ ];
 
 const PLAYLIST = TRACK_TITLES.map((title, i) => ({
   title,
   artist: TRACK_ARTISTS[i % TRACK_ARTISTS.length],
-  src: `nhac${i + 1}.mp3`,
+  src: `music${i + 1}.mp3`,
   cover: `anhnhac${i + 1}.jpg`
 }));
 
